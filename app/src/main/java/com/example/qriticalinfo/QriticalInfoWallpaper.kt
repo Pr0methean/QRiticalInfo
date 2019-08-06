@@ -7,9 +7,12 @@ import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.Rect
 import android.os.Bundle
+import android.os.Looper
+import android.os.Message
 import android.service.wallpaper.WallpaperService
 import android.util.Log
 import android.view.SurfaceHolder
+import androidx.annotation.UiThread
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
@@ -60,19 +63,6 @@ class QriticalInfoWallpaper : WallpaperService() {
         const val ACTION_REDRAW = "com.example.qriticalinfo.Redraw"
         const val ACTION_SET_GOOGLE_ACCOUNT = "com.example.qriticalinfo.SetGoogleAccount"
         val MINIMUM_DATE = GregorianCalendar(0, 1, 1)
-        val JSON_FACTORY = GsonFactory()
-        val HTTP_TRANSPORT by lazy { NetHttpTransport() }
-        fun getDriveForAccount(
-            value: GoogleSignInAccount,
-            context: Context
-        ): Drive {
-            val credential =
-                GoogleAccountCredential.usingOAuth2(context, Collections.singleton(DriveScopes.DRIVE_FILE))
-            credential.selectedAccount = value.account
-            return Drive.Builder(HTTP_TRANSPORT, JSON_FACTORY, credential)
-                .setApplicationName(context.getString(R.string.app_name))
-                .build()
-        }
     }
 
     private fun updateQrCode() {
@@ -96,8 +86,12 @@ class QriticalInfoWallpaper : WallpaperService() {
         LocalBroadcastManager.getInstance(applicationContext)
             .registerReceiver(object : BroadcastReceiver() {
                 override fun onReceive(context: Context?, intent: Intent?) {
-                    if (intent == null) return
-                    account = (intent.extras?.get("account")) as? GoogleSignInAccount
+                    val newAccount = intent?.extras?.get("account")
+                    if (newAccount != null) {
+                        account = newAccount as GoogleSignInAccount
+                    } else {
+                        updateQrCode()
+                    }
                 }
             }, IntentFilter(Context.WALLPAPER_SERVICE))
         account = GoogleSignIn.getLastSignedInAccount(applicationContext)
@@ -121,9 +115,7 @@ class QriticalInfoWallpaper : WallpaperService() {
                 resultRequested: Boolean
             ): Bundle {
                 when (action) {
-                    ACTION_REDRAW -> {
-                        account = (extras?.get("account")) as? GoogleSignInAccount
-                    }
+                    ACTION_REDRAW -> updateQrCode()
                 }
                 return super.onCommand(action, x, y, z, extras, resultRequested)
             }
@@ -135,6 +127,7 @@ class QriticalInfoWallpaper : WallpaperService() {
         }
     }
 
+    @UiThread
     internal fun draw(surfaceHolder: SurfaceHolder?) {
         if (surfaceHolder == null) return
         val frame = surfaceHolder.surfaceFrame
@@ -149,6 +142,9 @@ class QriticalInfoWallpaper : WallpaperService() {
         val currentQrCode: Bitmap? = qrCode
         val canvas = surfaceHolder.lockCanvas()
         if (canvas == null) {
+            if (Looper.getMainLooper().getThread() != Thread.currentThread()) {
+                Log.e(getString(R.string.logTag), "Called from non-UI thread", IllegalStateException())
+            }
             Log.wtf(getString(R.string.logTag), "lockCanvas failed")
             return
         }

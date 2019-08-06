@@ -51,7 +51,8 @@ class ChecklistItemFragment : Fragment() {
         get() = _checked.get()
         set(value) {
             if (_checked.getAndSet(value) != value) {
-                view?.checkmark?.setImageResource(TODO()) // TODO
+                view?.checkmark?.setImageDrawable(
+                    resources.getDrawable(if (value) R.drawable.ic_done else R.drawable.ic_todo))
                 view?.checkmark?.contentDescription = getString(if (value) R.string.abc_action_mode_done
                     else R.string.todo)
             }
