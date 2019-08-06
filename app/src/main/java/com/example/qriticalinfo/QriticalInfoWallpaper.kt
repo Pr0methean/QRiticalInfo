@@ -48,11 +48,13 @@ class QriticalInfoWallpaper : WallpaperService() {
                 updateQrCode()
             }
         }
-
     val lastUpdated = AtomicReference(MINIMUM_DATE)
     private val defaultFilePrefs by lazy {
         getSharedPreferences(getString(R.string.chosen_file_key), Context.MODE_PRIVATE)
     }
+    @Volatile private var qrCode: Bitmap? = null
+    @Volatile private var width = 0
+    @Volatile private var height = 0
 
     companion object {
         const val ACTION_REDRAW = "com.example.qriticalinfo.Redraw"
@@ -76,8 +78,11 @@ class QriticalInfoWallpaper : WallpaperService() {
     private fun updateQrCode() {
         val currentDrive = drive ?: return
         val fileId = getFileId(currentDrive)
-        val webLink = currentDrive.Files().get(fileId)["webViewLink"]
-        // TODO
+        val webLink = currentDrive.Files().get(fileId)["webViewLink"].toString()
+        qrCode = QRCode.from(webLink)
+            .withErrorCorrection(ErrorCorrectionLevel.H)
+            .withSize(width, height)
+            .bitmap()
     }
 
     private fun getFileId(currentDrive: Drive): String? {
@@ -133,34 +138,29 @@ class QriticalInfoWallpaper : WallpaperService() {
     internal fun draw(surfaceHolder: SurfaceHolder?) {
         if (surfaceHolder == null) return
         val frame = surfaceHolder.surfaceFrame
-        val width = frame.width()
-        val height = frame.height()
-        val dest = Rect(0, 0, width, height)
-        val currentAccount = account
-        val bitmap: Bitmap? = currentAccount?.let {
-            QRCode.from(createUrl(currentAccount))
-                .withErrorCorrection(ErrorCorrectionLevel.H)
-                .withSize(width, height)
-                .bitmap()
+        val newWidth = frame.width()
+        val newHeight = frame.height()
+        if (width != newWidth || height != newHeight) {
+            width = newWidth
+            height = newHeight
+            updateQrCode()
         }
+        val dest = Rect(0, 0, newWidth, newHeight)
+        val currentQrCode: Bitmap? = qrCode
         val canvas = surfaceHolder.lockCanvas()
         if (canvas == null) {
             Log.wtf(getString(R.string.logTag), "lockCanvas failed")
             return
         }
         try {
-            if (bitmap == null) {
+            if (currentQrCode == null) {
                 // TODO: Error message
             } else {
-                canvas.drawBitmap(bitmap, null, dest, null)
+                canvas.drawBitmap(currentQrCode, null, dest, null)
             }
         } finally {
             surfaceHolder.unlockCanvasAndPost(canvas)
         }
     }
 
-    private fun createUrl(account: GoogleSignInAccount): String {
-        lastUpdated.set(GregorianCalendar())
-        return "TODO $account" // TODO
-    }
 }
