@@ -1,36 +1,31 @@
 package com.example.qriticalinfo
 
 import android.content.Context
-import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
-import kotlinx.android.synthetic.main.fragment_checklist_item.*
 import kotlinx.android.synthetic.main.fragment_checklist_item.view.*
-import kotlinx.android.synthetic.main.fragment_checklist_item.view.checkmark
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
-// TODO: Rename parameter arguments, choose names that match
-// the fragment initialization parameters, e.g. ARG_ITEM_NUMBER
 private const val ARG_NAME = "nameRes"
 private const val ARG_CHECKED = "checked"
 
 /**
  * A simple [Fragment] subclass.
  * Activities that contain this fragment must implement the
- * [ChecklistItemFragment.OnFragmentInteractionListener] interface
- * to handle interaction events.
+ * [View.OnClickListener] interface to handle interaction events.
  * Use the [ChecklistItemFragment.newInstance] factory method to
  * create an instance of this fragment.
  *
  */
 class ChecklistItemFragment : Fragment() {
     private val _enabled = AtomicBoolean(false)
-    public var enabled : Boolean
+    var enabled : Boolean
         get() = _enabled.get()
         set(value) {
             if (_enabled.getAndSet(value) != value) {
@@ -38,27 +33,23 @@ class ChecklistItemFragment : Fragment() {
             }
         }
     private val _onClickListener: AtomicReference<View.OnClickListener?> = AtomicReference(null)
-    public var onClickListener : View.OnClickListener?
-        get() = _onClickListener.get()
-        set(value) {
-            if (_onClickListener.getAndSet(value) != value) {
-                view?.setOnClickListener(value)
-            }
-        }
+    var onClickListener by AtomicReferenceObservable<View.OnClickListener?>(null)
+        { _, new -> view?.setOnClickListener(new) }
     // TODO: Rename and change types of parameters
+    private val checkedIcon by lazy { ContextCompat.getDrawable(context!!, R.drawable.ic_done) }
+    private val uncheckedIcon by lazy { ContextCompat.getDrawable(context!!, R.drawable.ic_todo) }
     private val _checked = AtomicBoolean(false)
-    public var checked : Boolean
+    var checked : Boolean
         get() = _checked.get()
         set(value) {
             if (_checked.getAndSet(value) != value) {
-                view?.checkmark?.setImageDrawable(
-                    resources.getDrawable(if (value) R.drawable.ic_done else R.drawable.ic_todo))
-                view?.checkmark?.contentDescription = getString(if (value) R.string.abc_action_mode_done
+                view?.checkmark?.setImageDrawable(if (value) checkedIcon else uncheckedIcon)
+                view?.checkmark?.contentDescription = getString(if (value) R.string.done
                     else R.string.todo)
             }
         }
     private val _nameRes = AtomicInteger(R.string.loading)
-    public var nameRes : Int
+    var nameRes : Int
         get() = _nameRes.get()
         set(value) {
             if (_nameRes.getAndSet(value) != value) {
@@ -93,7 +84,7 @@ class ChecklistItemFragment : Fragment() {
         if (context is View.OnClickListener) {
             onClickListener = context
         } else {
-            throw RuntimeException(context.toString() + " must implement View.OnClickListener")
+            throw RuntimeException("$context must implement View.OnClickListener")
         }
     }
 
