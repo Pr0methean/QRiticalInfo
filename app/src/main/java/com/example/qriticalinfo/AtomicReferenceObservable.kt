@@ -16,6 +16,6 @@ open class AtomicReferenceObservable<T>(initialValue: T, val onChange: (T, T) ->
         }
     }
 
-    val field = AtomicReference<T>(initialValue)
+    private val field = AtomicReference<T>(initialValue)
 
 }
