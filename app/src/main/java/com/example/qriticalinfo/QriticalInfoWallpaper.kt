@@ -105,7 +105,7 @@ class QriticalInfoWallpaper : WallpaperService(), SharedPreferences.OnSharedPref
                     }
                 }
             }, IntentFilter(Context.WALLPAPER_SERVICE))
-        account = GoogleSignIn.getLastSignedInAccount(applicationContext)
+        account = filterDefault(GoogleSignIn.getLastSignedInAccount(applicationContext))
         updateQrCode()
         return object : Engine() {
             override fun onSurfaceRedrawNeeded(holder: SurfaceHolder?) {
