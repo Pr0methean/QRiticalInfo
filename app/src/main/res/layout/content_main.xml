@@ -65,6 +65,7 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="8dp"
         android:text="@string/editfile"
+        android:enabled="false"
         app:layout_constraintStart_toEndOf="@+id/buttonNew"
         app:layout_constraintTop_toTopOf="@+id/buttonChoose"
         tools:layout_editor_absoluteY="46dp" />
