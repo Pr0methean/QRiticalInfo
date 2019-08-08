@@ -1,5 +1,6 @@
 package com.example.qriticalinfo
 
+import android.app.WallpaperManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -60,21 +61,26 @@ class QriticalInfoWallpaper : WallpaperService(), SharedPreferences.OnSharedPref
     }
 
     internal fun updateQrCode() {
+        val curWidth = width
+        val curHeight = height
         val webLink = defaultFilePrefs.getString("share", null)
         if (webLink == null) {
-            val errorDisplay = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val errorDisplay = Bitmap.createBitmap(curWidth, curHeight, Bitmap.Config.ARGB_8888)
             val c = Canvas(errorDisplay)
             c.drawText(getString(R.string.not_configured), width * 0.5f, height * 0.5f, ERROR_PAINT)
             qrCode = errorDisplay
         } else {
             qrCode = QRCode.from(webLink)
                 .withErrorCorrection(ErrorCorrectionLevel.H)
-                .withSize(width, height)
+                .withSize(curWidth, curHeight)
                 .bitmap()
         }
     }
 
     override fun onCreateEngine(): Engine {
+        val wallpaperManager = WallpaperManager.getInstance(applicationContext)
+        width = wallpaperManager.desiredMinimumWidth
+        height = wallpaperManager.desiredMinimumHeight
         defaultFilePrefs.registerOnSharedPreferenceChangeListener(this)
         LocalBroadcastManager.getInstance(applicationContext)
             .registerReceiver(object : BroadcastReceiver() {
@@ -83,7 +89,6 @@ class QriticalInfoWallpaper : WallpaperService(), SharedPreferences.OnSharedPref
                     updateQrCode()
                 }
             }, IntentFilter(Context.WALLPAPER_SERVICE))
-        updateQrCode()
         return object : Engine() {
             override fun onSurfaceRedrawNeeded(holder: SurfaceHolder?) {
                 super.onSurfaceRedrawNeeded(holder)
@@ -112,9 +117,11 @@ class QriticalInfoWallpaper : WallpaperService(), SharedPreferences.OnSharedPref
             override fun onCreate(surfaceHolder: SurfaceHolder?) {
                 super.onCreate(surfaceHolder)
                 Log.d(getString(R.string.logTag), "onCreate")
-                resizeIfNecessary(surfaceHolder)
-                updateQrCode()
-                draw(surfaceHolder)
+                if (surfaceHolder != null) {
+                    resizeIfNecessary(surfaceHolder)
+                    updateQrCode()
+                    draw(surfaceHolder)
+                }
             }
 
             override fun onCommand(
@@ -173,7 +180,7 @@ class QriticalInfoWallpaper : WallpaperService(), SharedPreferences.OnSharedPref
         val frame = newHolder.surfaceFrame
         val newWidth = frame.width()
         val newHeight = frame.height()
-        if (width != newWidth || height != newHeight) {
+        if (newWidth > 0 && newHeight > 0 && (width != newWidth || height != newHeight)) {
             width = newWidth
             height = newHeight
             updateQrCode()
