@@ -72,12 +72,7 @@ class QriticalInfoWallpaper : WallpaperService(), SharedPreferences.OnSharedPref
     }
 
     internal fun updateQrCode() {
-        val currentDrive = drive ?: return
-        val fileUri = getFileUri(defaultFilePrefs, account)
-        val webLink = if (fileUri == null) {null} else {
-            currentDrive.Files().get(DocumentsContract.getDocumentId(Uri.parse(fileUri)))["webViewLink"]
-                .toString()
-        }
+        val webLink = defaultFilePrefs.getString("share", null)
         if (webLink == null) {
             val errorDisplay = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
             val c = Canvas(errorDisplay)
@@ -105,7 +100,9 @@ class QriticalInfoWallpaper : WallpaperService(), SharedPreferences.OnSharedPref
                     }
                 }
             }, IntentFilter(Context.WALLPAPER_SERVICE))
-        account = filterDefault(GoogleSignIn.getLastSignedInAccount(applicationContext))
+        if (account == null) { // FIXME: Not atomic
+            account = filterDefault(GoogleSignIn.getLastSignedInAccount(applicationContext))
+        }
         updateQrCode()
         return object : Engine() {
             override fun onSurfaceRedrawNeeded(holder: SurfaceHolder?) {
