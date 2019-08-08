@@ -62,7 +62,7 @@ class QriticalInfoWallpaper : WallpaperService(), SharedPreferences.OnSharedPref
 
     @Volatile private var width = 0
     @Volatile private var height = 0
-    @Volatile private var haveSurface = false
+    @Volatile internal var haveSurface = false
 
     companion object {
         const val ACTION_REDRAW = "com.example.qriticalinfo.Redraw"
@@ -149,7 +149,9 @@ class QriticalInfoWallpaper : WallpaperService(), SharedPreferences.OnSharedPref
                 resultRequested: Boolean
             ): Bundle? {
                 val out = super.onCommand(action, x, y, z, extras, resultRequested)
-                Log.d(getString(R.string.logTag), "onCommand($action,$x,$y,$z,$extras,$resultRequested)")
+                if (BuildConfig.DEBUG) {
+                    Log.d(getString(R.string.logTag), "onCommand($action,$x,$y,$z,$extras,$resultRequested)")
+                }
                 when (action) {
                     ACTION_REDRAW -> {
                         updateQrCode()
