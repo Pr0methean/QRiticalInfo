@@ -2,9 +2,15 @@ package com.example.qriticalinfo
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.app.WallpaperManager
+import android.content.ActivityNotFoundException
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.DocumentsContract
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
@@ -13,26 +19,25 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
-import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.Scope
 import com.google.api.services.drive.DriveScopes
-import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.android.synthetic.main.content_main.*
-import android.app.WallpaperManager
-import android.content.ActivityNotFoundException
-import android.content.ComponentName
-import android.net.Uri
-import android.os.Build
-import android.provider.DocumentsContract
 
 class MainActivity : AppCompatActivity(), View.OnClickListener {
     override fun onClick(view: View?) {
         TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
     }
 
-    lateinit var gso : GoogleSignInOptions
-    lateinit var client : GoogleSignInClient
+    private val gso by lazy {
+        GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestScopes(Scope(DriveScopes.DRIVE_FILE))
+            .build()
+    }
+
+    private val client by lazy {
+        GoogleSignIn.getClient(applicationContext, gso)
+    }
 
     private val defaultFilePrefs by lazy {
         getSharedPreferences(getString(R.string.chosen_file_key), Context.MODE_PRIVATE)
@@ -44,7 +49,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         const val RC_SET_WALLPAPER = 3
     }
 
-    var account by AtomicReferenceObservable<GoogleSignInAccount?>(null) {_, new ->
+    private var account by AtomicReferenceObservable<GoogleSignInAccount?>(null) { _, new ->
         val loggedIn = (new != null)
         (loginFragment as ChecklistItemFragment).nameRes =
             if (loggedIn) R.string.change_account else R.string.log_in
@@ -52,16 +57,14 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         val intent = Intent(applicationContext!!, QriticalInfoWallpaper::class.java)
         intent.action = Context.WALLPAPER_SERVICE
         intent.putExtra("account", new)
-        Log.d(getString(R.string.logTag), "Sending intent for account $new")
+        if (BuildConfig.DEBUG) {
+            Log.d(getString(R.string.logTag), "Sending intent for account $new")
+        }
         startService(intent)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestScopes(Scope(DriveScopes.DRIVE_FILE))
-            .build()
-        client = GoogleSignIn.getClient(applicationContext, gso)
         val initialAccount = filterDefault(GoogleSignIn.getLastSignedInAccount(applicationContext))
         setContentView(R.layout.activity_main)
         //setSupportActionBar(toolbar)
@@ -117,15 +120,10 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         wallpaperPickerFragment.checked = wallpaperEnabled()
         wallpaperPickerFragment.onClickListener = View.OnClickListener {
             val i = Intent()
+            i.action = WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER
 
-            if (Build.VERSION.SDK_INT > 15) {
-                i.action = WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER
-
-                val p = QriticalInfoWallpaper::class.java.getPackage()!!.name
-                i.putExtra(WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT, ComponentName(p, QriticalInfoWallpaper::class.java.name))
-            } else {
-                i.action = WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER
-            }
+            val p = QriticalInfoWallpaper::class.java.getPackage()!!.name
+            i.putExtra(WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT, ComponentName(p, QriticalInfoWallpaper::class.java.name))
             startActivityForResult(i, RC_SET_WALLPAPER)
         }
     }
@@ -135,14 +133,15 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         if (currentAccount == null) {
             Toast.makeText(this@MainActivity.applicationContext, R.string.log_in_first, Toast.LENGTH_LONG).show()
         } else {
-            val intent1 = Intent(action)
-            intent1.addCategory(Intent.CATEGORY_OPENABLE)
-            intent1.putExtra(
-                DocumentsContract.EXTRA_INITIAL_URI,
-                getDriveForAccount(currentAccount, applicationContext).baseUrl
-            )
-            intent1.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
-            val intent = intent1
+            val intent = Intent(action)
+            intent.addCategory(Intent.CATEGORY_OPENABLE)
+            if (Build.VERSION.SDK_INT >= 26) {
+                intent.putExtra(
+                    DocumentsContract.EXTRA_INITIAL_URI,
+                    getDriveForAccount(currentAccount, applicationContext).baseUrl
+                )
+            }
+            intent.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
             intent.type = mimeType
             startActivityForResult(intent, RC_PICK_FILE)
         }
@@ -178,7 +177,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                     return
                 }
                 defaultFilePrefs.edit().putString(currentAccount.idToken,
-                    uri?.toString()).apply()
+                    uri.toString()).apply()
                 val intent = Intent(applicationContext!!, QriticalInfoWallpaper::class.java)
                 intent.action = Context.WALLPAPER_SERVICE
                 startService(intent)

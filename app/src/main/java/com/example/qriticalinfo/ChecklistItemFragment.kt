@@ -10,7 +10,6 @@ import androidx.fragment.app.Fragment
 import kotlinx.android.synthetic.main.fragment_checklist_item.view.*
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.atomic.AtomicReference
 
 private const val ARG_NAME = "nameRes"
 private const val ARG_CHECKED = "checked"
@@ -32,7 +31,6 @@ class ChecklistItemFragment : Fragment() {
                 view?.isEnabled = value
             }
         }
-    private val _onClickListener: AtomicReference<View.OnClickListener?> = AtomicReference(null)
     var onClickListener by AtomicReferenceObservable<View.OnClickListener?>(null)
         { _, new -> view?.setOnClickListener(new) }
     // TODO: Rename and change types of parameters

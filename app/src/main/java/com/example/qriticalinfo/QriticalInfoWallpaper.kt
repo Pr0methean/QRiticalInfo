@@ -26,7 +26,7 @@ import net.glxn.qrgen.android.QRCode
 import java.util.*
 import java.util.concurrent.atomic.AtomicReference
 
-val ERROR_PAINT = Paint(R.color.error_color_material_dark)
+val ERROR_PAINT = Paint(R.color.error_text)
 
 class QriticalInfoWallpaper : WallpaperService(), SharedPreferences.OnSharedPreferenceChangeListener {
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, p1: String?) {
