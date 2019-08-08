@@ -17,7 +17,8 @@
         android:layout_marginLeft="16dp"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        tools:layout_editor_absoluteY="16dp" />
+        tools:layout_editor_absoluteY="16dp"
+        tools:layout="@layout/fragment_checklist_item" />
 
     <fragment
         android:id="@+id/chooseFileFragment"
@@ -28,7 +29,8 @@
         android:layout_marginLeft="16dp"
         android:layout_marginTop="8dp"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/loginFragment" />
+        app:layout_constraintTop_toBottomOf="@+id/loginFragment"
+        tools:layout="@layout/fragment_checklist_item" />
 
     <fragment
         android:id="@+id/wallpaperPickerFragment"
@@ -39,7 +41,8 @@
         android:layout_marginLeft="16dp"
         android:layout_marginTop="8dp"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/buttonChoose" />
+        app:layout_constraintTop_toBottomOf="@+id/buttonChoose"
+        tools:layout="@layout/fragment_checklist_item" />
 
     <Button
         android:id="@+id/buttonChoose"
@@ -61,7 +64,7 @@
         app:layout_constraintTop_toTopOf="@+id/buttonChoose" />
 
     <Button
-        android:id="@+id/button2"
+        android:id="@+id/buttonEdit"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="8dp"

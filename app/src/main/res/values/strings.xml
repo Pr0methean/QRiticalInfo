@@ -21,4 +21,8 @@
     <string name="choose">Browse existing</string>
     <string name="newfile">New…</string>
     <string name="editfile">Edit…</string>
+    <string name="choose_file_first">Choose or create a file first!</string>
+    <string name="not_configured">This wallpaper isn\'t set up! Open its settings.</string>
+    <string name="no_app_can_edit">No installed app can open this file!</string>
+    <string name="not_on_drive">The file you\'re sharing must be in your Google Drive.</string>
 </resources>

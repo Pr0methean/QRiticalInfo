@@ -1,6 +1,7 @@
 package com.example.qriticalinfo
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -18,9 +19,10 @@ import com.google.android.gms.common.api.Scope
 import com.google.api.services.drive.DriveScopes
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.android.synthetic.main.content_main.*
-import java.util.concurrent.atomic.AtomicReference
 import android.app.WallpaperManager
+import android.content.ActivityNotFoundException
 import android.content.ComponentName
+import android.net.Uri
 import android.os.Build
 import android.provider.DocumentsContract
 
@@ -42,7 +44,17 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         const val RC_SET_WALLPAPER = 3
     }
 
-    val account : AtomicReference<GoogleSignInAccount?> = AtomicReference(null)
+    var account by AtomicReferenceObservable<GoogleSignInAccount?>(null) {_, new ->
+        val loggedIn = (new != null)
+        (loginFragment as ChecklistItemFragment).nameRes =
+            if (loggedIn) R.string.change_account else R.string.log_in
+        (loginFragment as ChecklistItemFragment).checked = loggedIn
+        val intent = Intent(applicationContext!!, QriticalInfoWallpaper::class.java)
+        intent.action = Context.WALLPAPER_SERVICE
+        intent.putExtra("account", new)
+        Log.d(getString(R.string.logTag), "Sending intent for account $new")
+        startService(intent)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,21 +63,19 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
             .build()
         client = GoogleSignIn.getClient(applicationContext, gso)
         val initialAccount = filterDefault(GoogleSignIn.getLastSignedInAccount(applicationContext))
-        account.set(initialAccount)
         setContentView(R.layout.activity_main)
-        setSupportActionBar(toolbar)
+        //setSupportActionBar(toolbar)
+        account = initialAccount
         val loginFragment = this.loginFragment as ChecklistItemFragment
         loginFragment.nameRes = R.string.log_in
         loginFragment.checked = initialAccount != null
         loginFragment.onClickListener = View.OnClickListener {
-            if (account.get() != null) {
+            if (account != null) {
                 Log.d(getString(R.string.logTag), "Signing out")
                 loginFragment.enabled = false
                 val signOutTask = client.signOut()
                 signOutTask.addOnCompleteListener {
-                    setAccount(null)
-                    loginFragment.nameRes = R.string.log_in
-                    loginFragment.checked = false
+                    account = null
                     loginFragment.enabled = true
                 }
                 signOutTask.addOnFailureListener {
@@ -82,6 +92,26 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         chooseFileFragment.checked = false // TODO
         buttonChoose.setOnClickListener { launchFilePicker(Intent.ACTION_OPEN_DOCUMENT, "text/*") }
         buttonNew.setOnClickListener { launchFilePicker(Intent.ACTION_CREATE_DOCUMENT, "text/plain") }
+        buttonEdit.setOnClickListener {
+            val currentAccount = account
+            if (currentAccount == null) {
+                Toast.makeText(this@MainActivity.applicationContext, R.string.log_in_first, Toast.LENGTH_LONG).show()
+            } else {
+                val uriString = getFileUri(defaultFilePrefs, currentAccount)
+                if (uriString == null) {
+                    Toast.makeText(this@MainActivity.applicationContext, R.string.choose_file_first, Toast.LENGTH_LONG).show()
+                } else {
+                    val uri = Uri.parse(uriString)
+                    val i = Intent(Intent.ACTION_EDIT)
+                    i.data = uri
+                    try {
+                        startActivity(i)
+                    } catch (e: ActivityNotFoundException) {
+                        Toast.makeText(this@MainActivity.applicationContext, R.string.no_app_can_edit, Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }
         val wallpaperPickerFragment = wallpaperPickerFragment as ChecklistItemFragment
         wallpaperPickerFragment.nameRes = R.string.set_wallpaper
         wallpaperPickerFragment.checked = wallpaperEnabled()
@@ -101,7 +131,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
     }
 
     private fun launchFilePicker(action: String, mimeType: String) {
-        val currentAccount = account.get()
+        val currentAccount = account
         if (currentAccount == null) {
             Toast.makeText(this@MainActivity.applicationContext, R.string.log_in_first, Toast.LENGTH_LONG).show()
         } else {
@@ -131,16 +161,22 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                 if (!signInTask.isSuccessful) {
                     Log.e(getString(R.string.logTag), "signInTask failed", signInTask.exception)
                 } else {
-                    setAccount(signInTask.result)
+                    account = filterDefault(signInTask.result)
                 }
             }
             RC_PICK_FILE -> {
                 if (resultCode != Activity.RESULT_OK) {
                     Log.e(getString(R.string.logTag), "File picking failed with result code $resultCode")
                 }
-                val currentAccount = account.get() ?: return
-                val uri = data?.data
-                // TODO: Check that it's actually in Google Drive
+                val currentAccount = account ?: return
+                val uri = data?.data ?: return
+                if ("com.google.android.apps.docs.storage" != uri.authority) {
+                    Log.e(getString(R.string.logTag), "$uri isn't on Google Drive")
+                    val alert = AlertDialog.Builder(applicationContext)
+                    alert.setMessage(R.string.not_on_drive)
+                    alert.create().show()
+                    return
+                }
                 defaultFilePrefs.edit().putString(currentAccount.idToken,
                     uri?.toString()).apply()
                 val intent = Intent(applicationContext!!, QriticalInfoWallpaper::class.java)
@@ -154,19 +190,6 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                 (wallpaperPickerFragment as ChecklistItemFragment).checked = wallpaperEnabled()
             }
         }
-    }
-
-    private fun setAccount(newAccount: GoogleSignInAccount?) {
-        val realNewAccount = filterDefault(newAccount)
-        val loggedIn = realNewAccount != null
-        (loginFragment as ChecklistItemFragment).nameRes =
-            if (loggedIn) R.string.change_account else R.string.log_in
-        (loginFragment as ChecklistItemFragment).checked = loggedIn
-        account.set(realNewAccount)
-        val intent = Intent(applicationContext!!, QriticalInfoWallpaper::class.java)
-        intent.action = Context.WALLPAPER_SERVICE
-        intent.putExtra("account", realNewAccount)
-        startService(intent)
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {

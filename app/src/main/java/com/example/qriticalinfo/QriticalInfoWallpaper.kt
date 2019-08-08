@@ -4,11 +4,15 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.SharedPreferences
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
 import android.graphics.Rect
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
-import android.os.Looper
+import android.provider.DocumentsContract
 import android.service.wallpaper.WallpaperService
 import android.util.Log
 import android.view.SurfaceHolder
@@ -22,13 +26,20 @@ import net.glxn.qrgen.android.QRCode
 import java.util.*
 import java.util.concurrent.atomic.AtomicReference
 
-class QriticalInfoWallpaper : WallpaperService() {
+val ERROR_PAINT = Paint(R.color.error_color_material_dark)
 
-    var account by AtomicReferenceObservable<GoogleSignInAccount?>(null) {_, new ->
+class QriticalInfoWallpaper : WallpaperService(), SharedPreferences.OnSharedPreferenceChangeListener {
+    override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, p1: String?) {
+        if (defaultFilePrefs == sharedPreferences) {
+            updateQrCode()
+        }
+    }
+
+    var account by AtomicReferenceObservable<GoogleSignInAccount?>(null) { _, new ->
         if (new == null) {
             drive = null
         } else {
-            getDriveForAccount(new, applicationContext)
+            drive = getDriveForAccount(new, applicationContext)
         }
     }
 
@@ -62,25 +73,30 @@ class QriticalInfoWallpaper : WallpaperService() {
 
     internal fun updateQrCode() {
         val currentDrive = drive ?: return
-        val fileId = getFileId()
-        val webLink = currentDrive.Files().get(fileId)["webViewLink"].toString()
-        qrCode = QRCode.from(webLink)
-            .withErrorCorrection(ErrorCorrectionLevel.H)
-            .withSize(width, height)
-            .bitmap()
+        val fileUri = getFileUri(defaultFilePrefs, account)
+        val webLink = if (fileUri == null) {null} else {
+            currentDrive.Files().get(DocumentsContract.getDocumentId(Uri.parse(fileUri)))["webViewLink"]
+                .toString()
+        }
+        if (webLink == null) {
+            val errorDisplay = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val c = Canvas(errorDisplay)
+            c.drawText(getString(R.string.not_configured), width * 0.5f, height * 0.5f, ERROR_PAINT)
+            qrCode = errorDisplay
+        } else {
+            qrCode = QRCode.from(webLink)
+                .withErrorCorrection(ErrorCorrectionLevel.H)
+                .withSize(width, height)
+                .bitmap()
+        }
     }
 
-    private fun getFileId(): String? {
-        val currentAccount = account
-        return if (currentAccount != null) {
-            defaultFilePrefs.getString(currentAccount.idToken, null)
-        } else null
-    }
-
-    override fun onCreateEngine(): Engine? {
+    override fun onCreateEngine(): Engine {
+        defaultFilePrefs.registerOnSharedPreferenceChangeListener(this)
         LocalBroadcastManager.getInstance(applicationContext)
             .registerReceiver(object : BroadcastReceiver() {
                 override fun onReceive(context: Context?, intent: Intent?) {
+                    Log.d(getString(R.string.logTag), "onReceive")
                     val newAccount = intent?.extras?.get("account")
                     if (newAccount != null) {
                         account = newAccount as GoogleSignInAccount
@@ -90,14 +106,18 @@ class QriticalInfoWallpaper : WallpaperService() {
                 }
             }, IntentFilter(Context.WALLPAPER_SERVICE))
         account = GoogleSignIn.getLastSignedInAccount(applicationContext)
+        updateQrCode()
         return object : Engine() {
             override fun onSurfaceRedrawNeeded(holder: SurfaceHolder?) {
                 super.onSurfaceRedrawNeeded(holder)
+                Log.d(getString(R.string.logTag), "onSurfaceRedrawNeeded")
                 draw(holder)
             }
 
             override fun onSurfaceChanged(holder: SurfaceHolder?, format: Int, width: Int, height: Int) {
                 super.onSurfaceChanged(holder, format, width, height)
+                resizeIfNecessary(surfaceHolder)
+                Log.d(getString(R.string.logTag), "onSurfaceChanged")
                 if (holder == null) {
                     callback = null
                 } else {
@@ -108,11 +128,15 @@ class QriticalInfoWallpaper : WallpaperService() {
 
             override fun onSurfaceDestroyed(holder: SurfaceHolder?) {
                 super.onSurfaceDestroyed(holder)
+                Log.d(getString(R.string.logTag), "onSurfaceDestroyed")
                 haveSurface = false
             }
 
             override fun onCreate(surfaceHolder: SurfaceHolder?) {
                 super.onCreate(surfaceHolder)
+                Log.d(getString(R.string.logTag), "onCreate")
+                resizeIfNecessary(surfaceHolder)
+                updateQrCode()
                 draw(surfaceHolder)
             }
 
@@ -124,17 +148,21 @@ class QriticalInfoWallpaper : WallpaperService() {
                 extras: Bundle?,
                 resultRequested: Boolean
             ): Bundle? {
+                val out = super.onCommand(action, x, y, z, extras, resultRequested)
+                Log.d(getString(R.string.logTag), "onCommand($action,$x,$y,$z,$extras,$resultRequested)")
                 when (action) {
                     ACTION_REDRAW -> {
                         updateQrCode()
                     }
                 }
-                return super.onCommand(action, x, y, z, extras, resultRequested)
+                return out
             }
 
             override fun onSurfaceCreated(holder: SurfaceHolder?) {
                 super.onSurfaceCreated(holder)
-                haveSurface = true
+                resizeIfNecessary(holder)
+                Log.d(getString(R.string.logTag), "onSurfaceCreated")
+                    haveSurface = true
                 draw(holder)
             }
         }
@@ -161,11 +189,9 @@ class QriticalInfoWallpaper : WallpaperService() {
         }
     }
 
-    @UiThread
-    internal fun draw(surfaceHolder: SurfaceHolder?) {
-        if (surfaceHolder == null) return
-        if (!haveSurface) return
-        val frame = surfaceHolder.surfaceFrame
+    internal fun resizeIfNecessary(newHolder: SurfaceHolder?) {
+        newHolder ?: return
+        val frame = newHolder.surfaceFrame
         val newWidth = frame.width()
         val newHeight = frame.height()
         if (width != newWidth || height != newHeight) {
@@ -173,19 +199,25 @@ class QriticalInfoWallpaper : WallpaperService() {
             height = newHeight
             updateQrCode()
         }
-        val dest = Rect(0, 0, newWidth, newHeight)
+    }
+
+    @UiThread
+    internal fun draw(surfaceHolder: SurfaceHolder?) {
+        if (surfaceHolder == null) return
+        if (!haveSurface) return
+        resizeIfNecessary(surfaceHolder)
+        val dest = surfaceHolder.surfaceFrame
         val currentQrCode: Bitmap? = qrCode
         val canvas = surfaceHolder.lockCanvas()
         if (canvas == null) {
-            if (Looper.getMainLooper().thread != Thread.currentThread()) {
-                Log.e(getString(R.string.logTag), "Called from non-UI thread", IllegalStateException())
-            }
-            Log.wtf(getString(R.string.logTag), "lockCanvas failed")
+            Log.w(getString(R.string.logTag), "lockCanvas failed")
             return
+        } else {
+            Log.d(getString(R.string.logTag), "lockCanvas succeeded")
         }
         try {
             if (currentQrCode == null) {
-                // TODO: Error message
+                Log.e(getString(R.string.logTag), "currentQrCode not set")
             } else {
                 canvas.drawBitmap(currentQrCode, null, dest, null)
             }
