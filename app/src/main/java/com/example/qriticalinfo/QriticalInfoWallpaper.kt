@@ -35,18 +35,6 @@ class QriticalInfoWallpaper : WallpaperService(), SharedPreferences.OnSharedPref
         }
     }
 
-    var account by AtomicReferenceObservable<GoogleSignInAccount?>(null) { _, new ->
-        if (new == null) {
-            drive = null
-        } else {
-            drive = getDriveForAccount(new, applicationContext)
-        }
-    }
-
-    var drive by AtomicReferenceObservable<Drive?>(null) {_, _ ->
-        lastUpdated.set(MINIMUM_DATE)
-        updateQrCode()
-    }
     private val lastUpdated = AtomicReference(MINIMUM_DATE)
     private val defaultFilePrefs by lazy {
         getSharedPreferences(getString(R.string.chosen_file_key), Context.MODE_PRIVATE)
@@ -92,17 +80,9 @@ class QriticalInfoWallpaper : WallpaperService(), SharedPreferences.OnSharedPref
             .registerReceiver(object : BroadcastReceiver() {
                 override fun onReceive(context: Context?, intent: Intent?) {
                     Log.d(getString(R.string.logTag), "onReceive")
-                    val newAccount = intent?.extras?.get("account")
-                    if (newAccount != null) {
-                        account = newAccount as GoogleSignInAccount
-                    } else {
-                        updateQrCode()
-                    }
+                    updateQrCode()
                 }
             }, IntentFilter(Context.WALLPAPER_SERVICE))
-        if (account == null) { // FIXME: Not atomic
-            account = filterDefault(GoogleSignIn.getLastSignedInAccount(applicationContext))
-        }
         updateQrCode()
         return object : Engine() {
             override fun onSurfaceRedrawNeeded(holder: SurfaceHolder?) {

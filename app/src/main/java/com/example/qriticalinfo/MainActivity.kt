@@ -12,8 +12,6 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.DocumentsContract
 import android.util.Log
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -21,6 +19,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.Scope
+import com.google.api.services.drive.Drive
 import com.google.api.services.drive.DriveScopes
 import kotlinx.android.synthetic.main.content_main.*
 
@@ -51,9 +50,10 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
     private var account by AtomicReferenceObservable<GoogleSignInAccount?>(null) { _, new ->
         val loggedIn = (new != null)
-        (loginFragment as ChecklistItemFragment).nameRes =
+        val loginFrag = loginFragment as ChecklistItemFragment
+        loginFrag.nameRes =
             if (loggedIn) R.string.change_account else R.string.log_in
-        (loginFragment as ChecklistItemFragment).checked = loggedIn
+        loginFrag.checked = loggedIn
         val intent = Intent(applicationContext!!, QriticalInfoWallpaper::class.java)
         intent.action = Context.WALLPAPER_SERVICE
         intent.putExtra("account", new)
@@ -61,7 +61,16 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
             Log.d(getString(R.string.logTag), "Sending intent for account $new")
         }
         startService(intent)
+        drive = if (loggedIn) getDriveForAccount(new!!, applicationContext) else null
     }
+
+    private var editUri by AtomicReferenceObservable<Uri?>(null) {_, new ->
+        val chooseFileFrag = chooseFileFragment as ChecklistItemFragment
+        chooseFileFrag.checked = (new != null)
+        buttonEdit.isEnabled = (new != null)
+    }
+
+    private var drive by AtomicReferenceObservable<Drive?>(null) {_, _ -> }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -90,9 +99,9 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                 startActivityForResult(client.signInIntent, RC_SIGN_IN)
             }
         }
+        editUri = defaultFilePrefs.getString("edit", null)?.let { Uri.parse(it) }
         val chooseFileFragment = this.chooseFileFragment as ChecklistItemFragment
         chooseFileFragment.nameRes = R.string.edit_file
-        chooseFileFragment.checked = false // TODO
         buttonChoose.setOnClickListener { launchFilePicker(Intent.ACTION_OPEN_DOCUMENT, "text/*") }
         buttonNew.setOnClickListener { launchFilePicker(Intent.ACTION_CREATE_DOCUMENT, "text/plain") }
         buttonEdit.setOnClickListener {
@@ -167,7 +176,6 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                 if (resultCode != Activity.RESULT_OK) {
                     Log.e(getString(R.string.logTag), "File picking failed with result code $resultCode")
                 }
-                val currentAccount = account ?: return
                 val uri = data?.data ?: return
                 if ("com.google.android.apps.docs.storage" != uri.authority) {
                     Log.e(getString(R.string.logTag), "$uri isn't on Google Drive")
@@ -176,8 +184,19 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                     alert.create().show()
                     return
                 }
-                defaultFilePrefs.edit().putString(currentAccount.idToken,
-                    uri.toString()).apply()
+                editUri = uri
+                val currentDrive = drive
+                if (currentDrive == null) {
+                    Log.e(getString(R.string.logTag), "Unable to get sharing link")
+                    defaultFilePrefs.edit().remove("edit").remove("share").apply()
+                } else {
+                    val sharingUri = currentDrive.Files().get(DocumentsContract.getDocumentId(uri))["webViewLink"]
+                        .toString()
+                    defaultFilePrefs.edit()
+                        .putString("edit", uri.toString())
+                        .putString("share", sharingUri)
+                        .apply()
+                }
                 val intent = Intent(applicationContext!!, QriticalInfoWallpaper::class.java)
                 intent.action = Context.WALLPAPER_SERVICE
                 startService(intent)
@@ -188,22 +207,6 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                 }
                 (wallpaperPickerFragment as ChecklistItemFragment).checked = wallpaperEnabled()
             }
-        }
-    }
-
-    override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        // Inflate the menu; this adds items to the action bar if it is present.
-        menuInflater.inflate(R.menu.menu_main, menu)
-        return true
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
-        return when (item.itemId) {
-            R.id.action_settings -> true
-            else -> super.onOptionsItemSelected(item)
         }
     }
 }
