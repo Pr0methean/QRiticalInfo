@@ -1,4 +1,4 @@
-package com.example.qriticalinfo
+package com.example.qrhealth
 
 import android.app.WallpaperManager
 import android.content.BroadcastReceiver
@@ -8,26 +8,29 @@ import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.Rect
-import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
-import android.provider.DocumentsContract
 import android.service.wallpaper.WallpaperService
+import android.text.TextPaint
 import android.util.Log
 import android.view.SurfaceHolder
 import androidx.annotation.UiThread
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount
-import com.google.api.services.drive.Drive
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import net.glxn.qrgen.android.QRCode
 import java.util.*
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.math.max
+import kotlin.math.min
 
-val ERROR_PAINT = Paint(R.color.error_text)
+val ERROR_PAINT by lazy {
+    val out = TextPaint(Paint(R.color.error_text))
+    out.textSize = 18.0f
+    out
+}
+val SOURCE_SIZE = 1000
 
 class QriticalInfoWallpaper : WallpaperService(), SharedPreferences.OnSharedPreferenceChangeListener {
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, p1: String?) {
@@ -41,7 +44,7 @@ class QriticalInfoWallpaper : WallpaperService(), SharedPreferences.OnSharedPref
         getSharedPreferences(getString(R.string.chosen_file_key), Context.MODE_PRIVATE)
     }
     private val handler by lazy { Handler() }
-    var qrCode by AtomicReferenceObservable<Bitmap?>(null) {old, _ -> old?.recycle() }
+    var display by AtomicReferenceObservable<Bitmap?>(null) { old, _ -> old?.recycle() }
 
     var callback by AtomicReferenceObservable<DrawRunnable?>(null) {old, _ ->
         if (old != null) {
@@ -64,17 +67,36 @@ class QriticalInfoWallpaper : WallpaperService(), SharedPreferences.OnSharedPref
         val curWidth = width
         val curHeight = height
         val webLink = defaultFilePrefs.getString("share", null)
+        val out = Bitmap.createBitmap(curWidth, curHeight, Bitmap.Config.ARGB_8888)
+        val c = Canvas(out)
+        c.drawColor(Color.WHITE)
         if (webLink == null) {
-            val errorDisplay = Bitmap.createBitmap(curWidth, curHeight, Bitmap.Config.ARGB_8888)
-            val c = Canvas(errorDisplay)
             c.drawText(getString(R.string.not_configured), width * 0.5f, height * 0.5f, ERROR_PAINT)
-            qrCode = errorDisplay
         } else {
-            qrCode = QRCode.from(webLink)
+            Log.d(getString(R.string.logTag), "Generating a QR code for $webLink")
+            val smallerDim = min(width, height)
+            val largerDim = max(width, height)
+            val qrCodeSize = min(largerDim / 3, smallerDim)
+            val qrCode = QRCode.from(webLink)
+                .withColor(0x000000, 0xffffff)
                 .withErrorCorrection(ErrorCorrectionLevel.H)
-                .withSize(curWidth, curHeight)
+                .withSize(qrCodeSize, qrCodeSize)
                 .bitmap()
+            if (width > height) {
+                // 3 copies in row
+                val yOffset = (height - qrCodeSize) * 0.5f
+                c.drawBitmap(qrCode, 0.0f, yOffset, null)
+                c.drawBitmap(qrCode, qrCodeSize.toFloat(), yOffset, null)
+                c.drawBitmap(qrCode, qrCodeSize * 2.0f, yOffset, null)
+            } else {
+                // 3 copies in column
+                val xOffset = (width - qrCodeSize) * 0.5f
+                c.drawBitmap(qrCode, xOffset, 0.0f, null)
+                c.drawBitmap(qrCode, xOffset, qrCodeSize.toFloat(), null)
+                c.drawBitmap(qrCode, xOffset, qrCodeSize * 2.0f, null)
+            }
         }
+        display = out
     }
 
     override fun onCreateEngine(): Engine {
@@ -82,6 +104,15 @@ class QriticalInfoWallpaper : WallpaperService(), SharedPreferences.OnSharedPref
         width = wallpaperManager.desiredMinimumWidth
         height = wallpaperManager.desiredMinimumHeight
         defaultFilePrefs.registerOnSharedPreferenceChangeListener(this)
+        if (BuildConfig.DEBUG) {
+            val currentPrefs = defaultFilePrefs.all
+            if (currentPrefs.isEmpty()) {
+                Log.d(getString(R.string.logTag), "Shared prefs are empty in wallpaper")
+            }
+            for ((key, value) in currentPrefs) {
+                Log.d(getString(R.string.logTag), "Shared pref in wallpaper: $key = $value")
+            }
+        }
         LocalBroadcastManager.getInstance(applicationContext)
             .registerReceiver(object : BroadcastReceiver() {
                 override fun onReceive(context: Context?, intent: Intent?) {
@@ -193,13 +224,11 @@ class QriticalInfoWallpaper : WallpaperService(), SharedPreferences.OnSharedPref
         if (!haveSurface) return
         resizeIfNecessary(surfaceHolder)
         val dest = surfaceHolder.surfaceFrame
-        val currentQrCode: Bitmap? = qrCode
+        val currentQrCode: Bitmap? = display
         val canvas = surfaceHolder.lockCanvas()
         if (canvas == null) {
             Log.w(getString(R.string.logTag), "lockCanvas failed")
             return
-        } else {
-            Log.d(getString(R.string.logTag), "lockCanvas succeeded")
         }
         try {
             if (currentQrCode == null) {

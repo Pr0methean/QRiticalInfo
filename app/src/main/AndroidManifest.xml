@@ -1,16 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-          package="com.example.qriticalinfo">
-
+    xmlns:tools="http://schemas.android.com/tools"
+    package="com.example.qrhealth">
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.GET_ACCOUNTS"/>
     <application
             android:allowBackup="true"
             android:icon="@mipmap/ic_launcher"
             android:label="@string/app_name"
             android:roundIcon="@mipmap/ic_launcher_round"
             android:supportsRtl="true"
-            android:theme="@style/AppTheme">
+            android:theme="@style/AppTheme"
+        tools:ignore="GoogleAppIndexingWarning">
         <activity
-                android:name=".MainActivity"
+                android:name="com.example.qrhealth.MainActivity"
                 android:label="@string/app_name"
                 android:theme="@style/AppTheme.NoActionBar">
             <intent-filter>
@@ -22,7 +25,7 @@
         <service
                 android:enabled="true"
                 android:label="@string/wallpaper_name"
-                android:name=".QriticalInfoWallpaper"
+                android:name="com.example.qrhealth.QriticalInfoWallpaper"
                 android:permission="android.permission.BIND_WALLPAPER">
             <intent-filter>
                 <action android:name=
