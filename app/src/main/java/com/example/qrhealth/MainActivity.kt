@@ -16,6 +16,7 @@ import android.provider.DocumentsContract
 import android.util.Log
 import android.view.View
 import android.widget.Toast
+import androidx.annotation.WorkerThread
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -46,7 +47,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
     private val gso by lazy {
         GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestScopes(Scope(DriveScopes.DRIVE_FILE))
+            .requestScopes(Scope(DriveScopes.DRIVE_FILE), Scope(DriveScopes.DRIVE_METADATA_READONLY))
             .requestId()
             .requestEmail() // to fix https://stackoverflow.com/a/41870126/833771
             .build()
@@ -144,16 +145,19 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         buttonEdit.setOnClickListener {
             openFileForEditing(false)
         }
-        val wallpaperPickerFragment = wallpaperPickerFragment as ChecklistItemFragment
+        val wallpaperPickerFragment = this.wallpaperPickerFragment as ChecklistItemFragment
+        wallpaperPickerFragment.enabled = true
         wallpaperPickerFragment.nameRes = R.string.set_wallpaper
         wallpaperPickerFragment.checked = wallpaperEnabled()
         wallpaperPickerFragment.onClickListener = View.OnClickListener {
+            Log.d(getString(R.string.logTag), "wallpaperPickerFragment.OnClickListener starting")
             val i = Intent()
             i.action = WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER
 
             val p = QriticalInfoWallpaper::class.java.getPackage()!!.name
             i.putExtra(WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT, ComponentName(p, QriticalInfoWallpaper::class.java.name))
             startActivityForResult(i, RC_SET_WALLPAPER)
+            Log.d(getString(R.string.logTag), "wallpaperPickerFragment.OnClickListener done")
         }
         if (BuildConfig.DEBUG) {
             val currentPrefs = defaultFilePrefs.all
@@ -289,29 +293,39 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
             return false
         }
         val uriString = uri.toString()
-        val documentId = getIdFromUrl(uri)
+        val documentId = getIdFromUrl(uri, applicationContext)
         if (documentId == null) {
             Log.e(getString(R.string.logTag), "getIdFromUrl returned null for $uriString")
             return false
         }
         val accountId = account?.id
-        val sharingUri = lookupSharingUri(currentDrive, documentId)
-        if (sharingUri == null) {
-            if (!requestPermissionIfNeeded()) {
-                Log.e(getString(R.string.logTag), "Can't get sharing URI; still waiting for permission")
-                return false
-            }
-            val batch = currentDrive.batch()
-            val permissionTask = currentDrive.Permissions().create(documentId, sharingPermission)
-            permissionTask.queue(batch, object : JsonBatchCallback<Permission>() {
+        threadPool.submit {
+            val sharingUri = lookupSharingUri(currentDrive, documentId)
+            if (sharingUri == null) {
+                if (!requestPermissionIfNeeded()) {
+                    Log.e(
+                        getString(R.string.logTag),
+                        "Can't get sharing URI; still waiting for permission"
+                    )
+                }
+                val batch = currentDrive.batch()
+                val permissionTask =
+                    currentDrive.permissions().create(documentId, sharingPermission)
+                permissionTask.queue(batch, object : JsonBatchCallback<Permission>() {
                     override fun onSuccess(t: Permission?, responseHeaders: HttpHeaders?) {
-                        val sharingUriAfterPerm = lookupSharingUri(currentDrive, documentId)
-                        if (sharingUriAfterPerm == null) {
-                            Log.e(getString(R.string.logTag), "sharing URI still null after getting permission")
-                        } else {
-                            saveFileChoice(uriString, sharingUriAfterPerm, accountId)
+                        threadPool.submit {
+                            val sharingUriAfterPerm = lookupSharingUri(currentDrive, documentId)
+                            if (sharingUriAfterPerm == null) {
+                                Log.e(
+                                    getString(R.string.logTag),
+                                    "sharing URI still null after getting permission"
+                                )
+                            } else {
+                                saveFileChoice(uriString, sharingUriAfterPerm, accountId)
+                            }
                         }
                     }
+
                     override fun onFailure(e: GoogleJsonError?, responseHeaders: HttpHeaders?) {
                         Log.e(
                             getString(R.string.logTag),
@@ -319,18 +333,19 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                         )
                     }
                 })
-            // BatchRequest.execute() complains: "Calling this from your main thread can lead to deadlock"
-            threadPool.submit() {
-                Log.d(getString(R.string.logTag), "Batch started")
-                try {
-                    batch.execute()
-                } catch (t : Throwable) {
-                    Log.e(getString(R.string.logTag), "Error obtaining permission", t)
+                // BatchRequest.execute() complains: "Calling this from your main thread can lead to deadlock"
+                threadPool.submit() {
+                    Log.d(getString(R.string.logTag), "Batch started")
+                    try {
+                        batch.execute()
+                    } catch (t: Throwable) {
+                        Log.e(getString(R.string.logTag), "Error obtaining permission", t)
+                    }
+                    Log.d(getString(R.string.logTag), "Batch finished")
                 }
-                Log.d(getString(R.string.logTag), "Batch finished")
+            } else {
+                saveFileChoice(uriString, sharingUri, accountId)
             }
-        } else {
-            saveFileChoice(uriString, sharingUri, accountId)
         }
         return true
     }
@@ -365,9 +380,37 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         wallpaperIntent()
     }
 
+    @WorkerThread
     internal fun lookupSharingUri(
         currentDrive: Drive,
-        documentId: String) = currentDrive.Files().get(documentId)["webViewLink"]?.toString()
+        documentId: String): String? {
+        val request = currentDrive.Files().list()
+        request.corpora = "user"
+        request.pageSize = 1000
+        var nextPageToken: String? = null
+        do {
+            request.pageToken = nextPageToken
+            val response = request.execute()
+            nextPageToken = response.nextPageToken
+            val list = response.files
+            Log.d(getString(R.string.logTag), "response: ${response}.")
+            for ((header, value) in response) {
+                Log.d(getString(R.string.logTag), "$header: $value")
+            }
+            Log.d(
+                getString(R.string.logTag),
+                "response.incompleteSearch: ${response.incompleteSearch}."
+            )
+            Log.d(getString(R.string.logTag), "Got a list of ${list.size} files")
+            for (file in list) {
+                Log.d(getString(R.string.logTag), "File $file has id ${file.id}")
+                if (file.id == documentId) {
+                    return file["webViewLink"]?.toString()
+                }
+            }
+        } while (nextPageToken != null)
+        return null
+    }
 
     private fun wallpaperIntent() {
         val intent = Intent(applicationContext!!, QriticalInfoWallpaper::class.java)
