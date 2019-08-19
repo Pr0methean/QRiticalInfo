@@ -78,7 +78,7 @@ class QriticalInfoWallpaper : WallpaperService(), SharedPreferences.OnSharedPref
             val largerDim = max(width, height)
             val qrCodeSize = min(largerDim / 3, smallerDim)
             val qrCode = QRCode.from(webLink)
-                .withColor(0x000000, 0xffffff)
+                .withColor(Color.BLACK, Color.WHITE)
                 .withErrorCorrection(ErrorCorrectionLevel.H)
                 .withSize(qrCodeSize, qrCodeSize)
                 .bitmap()
@@ -225,20 +225,17 @@ class QriticalInfoWallpaper : WallpaperService(), SharedPreferences.OnSharedPref
         resizeIfNecessary(surfaceHolder)
         val dest = surfaceHolder.surfaceFrame
         val currentQrCode: Bitmap? = display
+        if (currentQrCode == null) {
+            Log.e(getString(R.string.logTag), "currentQrCode not set")
+            return
+        }
         val canvas = surfaceHolder.lockCanvas()
         if (canvas == null) {
             Log.w(getString(R.string.logTag), "lockCanvas failed")
             return
         }
-        try {
-            if (currentQrCode == null) {
-                Log.e(getString(R.string.logTag), "currentQrCode not set")
-            } else {
-                canvas.drawBitmap(currentQrCode, null, dest, null)
-            }
-        } finally {
-            surfaceHolder.unlockCanvasAndPost(canvas)
-        }
+        canvas.drawBitmap(currentQrCode, null, dest, null)
+        surfaceHolder.unlockCanvasAndPost(canvas)
         val currentCallback = callback
         if (currentCallback?.holder == surfaceHolder) {
             handler.postDelayed(currentCallback, REFRESH_DELAY_MS)

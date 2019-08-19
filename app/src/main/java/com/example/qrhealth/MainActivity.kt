@@ -13,6 +13,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.DocumentsContract
+import android.provider.OpenableColumns
 import android.util.Log
 import android.view.View
 import android.widget.Toast
@@ -29,6 +30,7 @@ import com.google.api.client.googleapis.json.GoogleJsonError
 import com.google.api.client.http.HttpHeaders
 import com.google.api.services.drive.Drive
 import com.google.api.services.drive.DriveScopes
+import com.google.api.services.drive.model.File
 import com.google.api.services.drive.model.Permission
 import kotlinx.android.synthetic.main.content_main.*
 import java.util.concurrent.Executors
@@ -47,7 +49,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
     private val gso by lazy {
         GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestScopes(Scope(DriveScopes.DRIVE_FILE), Scope(DriveScopes.DRIVE_METADATA_READONLY))
+            .requestScopes(Scope(DriveScopes.DRIVE))
             .requestId()
             .requestEmail() // to fix https://stackoverflow.com/a/41870126/833771
             .build()
@@ -293,28 +295,26 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
             return false
         }
         val uriString = uri.toString()
-        val documentId = getIdFromUrl(uri, applicationContext)
-        if (documentId == null) {
-            Log.e(getString(R.string.logTag), "getIdFromUrl returned null for $uriString")
-            return false
-        }
-        val accountId = account?.id
         threadPool.submit {
-            val sharingUri = lookupSharingUri(currentDrive, documentId)
-            if (sharingUri == null) {
-                if (!requestPermissionIfNeeded()) {
-                    Log.e(
-                        getString(R.string.logTag),
-                        "Can't get sharing URI; still waiting for permission"
-                    )
-                }
-                val batch = currentDrive.batch()
-                val permissionTask =
-                    currentDrive.permissions().create(documentId, sharingPermission)
-                permissionTask.queue(batch, object : JsonBatchCallback<Permission>() {
-                    override fun onSuccess(t: Permission?, responseHeaders: HttpHeaders?) {
-                        threadPool.submit {
-                            val sharingUriAfterPerm = lookupSharingUri(currentDrive, documentId)
+            val file = lookUpUri(uri, currentDrive)
+            if (file == null) {
+                Log.e(getString(R.string.logTag), "lookUpUri returned null for $uriString")
+            } else {
+                val accountId = account?.id
+                val sharingUri = file.webViewLink
+                if (sharingUri == null) {
+                    if (!requestPermissionIfNeeded()) {
+                        Log.e(
+                            getString(R.string.logTag),
+                            "Can't get sharing URI; still waiting for permission"
+                        )
+                    }
+                    val batch = currentDrive.batch()
+                    val permissionTask =
+                        currentDrive.permissions().create(file.id, sharingPermission)
+                    permissionTask.queue(batch, object : JsonBatchCallback<Permission>() {
+                        override fun onSuccess(t: Permission?, responseHeaders: HttpHeaders?) {
+                            val sharingUriAfterPerm = lookUpUri(uri, currentDrive)?.webViewLink
                             if (sharingUriAfterPerm == null) {
                                 Log.e(
                                     getString(R.string.logTag),
@@ -324,17 +324,14 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                                 saveFileChoice(uriString, sharingUriAfterPerm, accountId)
                             }
                         }
-                    }
 
-                    override fun onFailure(e: GoogleJsonError?, responseHeaders: HttpHeaders?) {
-                        Log.e(
-                            getString(R.string.logTag),
-                            "Error sharing file: $e (HTTP response: $responseHeaders)"
-                        )
-                    }
-                })
-                // BatchRequest.execute() complains: "Calling this from your main thread can lead to deadlock"
-                threadPool.submit() {
+                        override fun onFailure(e: GoogleJsonError?, responseHeaders: HttpHeaders?) {
+                            Log.e(
+                                getString(R.string.logTag),
+                                "Error sharing file: $e (HTTP response: $responseHeaders)"
+                            )
+                        }
+                    })
                     Log.d(getString(R.string.logTag), "Batch started")
                     try {
                         batch.execute()
@@ -342,9 +339,9 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                         Log.e(getString(R.string.logTag), "Error obtaining permission", t)
                     }
                     Log.d(getString(R.string.logTag), "Batch finished")
+                } else {
+                    saveFileChoice(uriString, sharingUri, accountId)
                 }
-            } else {
-                saveFileChoice(uriString, sharingUri, accountId)
             }
         }
         return true
@@ -376,40 +373,10 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                 "URIs of newly chosen file: $editingUri, $sharingUri"
             )
         }
-        prefUpdate.apply()
+        if (!prefUpdate.commit()) {
+            Log.e(getString(R.string.logTag), "Commit failed")
+        }
         wallpaperIntent()
-    }
-
-    @WorkerThread
-    internal fun lookupSharingUri(
-        currentDrive: Drive,
-        documentId: String): String? {
-        val request = currentDrive.Files().list()
-        request.corpora = "user"
-        request.pageSize = 1000
-        var nextPageToken: String? = null
-        do {
-            request.pageToken = nextPageToken
-            val response = request.execute()
-            nextPageToken = response.nextPageToken
-            val list = response.files
-            Log.d(getString(R.string.logTag), "response: ${response}.")
-            for ((header, value) in response) {
-                Log.d(getString(R.string.logTag), "$header: $value")
-            }
-            Log.d(
-                getString(R.string.logTag),
-                "response.incompleteSearch: ${response.incompleteSearch}."
-            )
-            Log.d(getString(R.string.logTag), "Got a list of ${list.size} files")
-            for (file in list) {
-                Log.d(getString(R.string.logTag), "File $file has id ${file.id}")
-                if (file.id == documentId) {
-                    return file["webViewLink"]?.toString()
-                }
-            }
-        } while (nextPageToken != null)
-        return null
     }
 
     private fun wallpaperIntent() {
@@ -417,4 +384,43 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         intent.action = Context.WALLPAPER_SERVICE
         startService(intent)
     }
+
+    @WorkerThread
+    private fun lookUpUri(uri: Uri, drive: Drive): File? {
+        val cursor = contentResolver.query(uri, null, null, null, null) ?:
+                return null
+        cursor.moveToFirst()
+        val mimeType = contentResolver.getType(uri)
+        val name = cursor.getString(cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME))
+        val request = drive.Files().list()
+        var query : String = "name = '${queryEscape(name)}'"
+        if (mimeType != null) {
+            query = "$query and mimeType = '${queryEscape(mimeType)}'"
+        }
+        request.q = query
+        request.corpora = "user"
+        request.pageSize = 1000
+        request.fields = "nextPageToken, files(id, name, webViewLink, mimeType)"
+        var nextPageToken: String? = null
+        val candidates = ArrayList<File>()
+        do {
+            request.pageToken = nextPageToken
+            Log.d(getString(R.string.logTag), "Sending request: ${request}")
+            val response = request.execute()
+            nextPageToken = response.nextPageToken
+            val list = response.files
+            Log.d(getString(R.string.logTag), "response: ${response}")
+            Log.d(getString(R.string.logTag), "Got a list of ${list.size} files")
+            candidates.addAll(list)
+        } while (nextPageToken != null)
+        if (candidates.size == 1) {
+            return candidates[0]
+        }
+        Log.e(getString(R.string.logTag),"Got ${candidates.size} matches: ${candidates}")
+        return null
+    }
+
+    private fun queryEscape(input: String): String =
+        input.replace("\\", "\\\\").replace("'", "\\'")
 }
+
