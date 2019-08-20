@@ -2,7 +2,7 @@
     <string name="app_name">QRitical Info</string>
     <string name="action_settings">Settings</string>
     <string name="log_in">Log in…</string>
-    <string name="logged_in">Logged into Google Drive</string>
+    <string name="logged_in">Log into Google Drive</string>
     <string name="edit_file">Select file</string>
     <string name="change_account">Change account…</string>
     <string name="wallpaper_name">QRitical Info Wallpaper</string>
@@ -11,7 +11,7 @@
     <string name="checklist_item_placeholder">TODO: Name this checklist item</string>
     <string name="main_activity_title">Set Up QRitical Info</string>
     <string name="loading">Loading…</string>
-    <string name="log_in_first">You must log in first.</string>
+    <string name="log_in_first">Log into Google Drive first.</string>
     <string name="todo">Not done yet</string>
     <string name="done">Done</string>
     <string name="set_wallpaper">QRitical Info is lock-screen wallpaper</string>

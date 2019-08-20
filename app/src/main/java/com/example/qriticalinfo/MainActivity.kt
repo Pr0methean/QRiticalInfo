@@ -1,6 +1,7 @@
 package com.example.qriticalinfo
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.WallpaperManager
@@ -77,8 +78,6 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
     private var account by AtomicReferenceObservable<GoogleSignInAccount?>(null) { _, new ->
         val loginFrag = loginFragment as ChecklistItemFragment
-        loginFrag.nameRes =
-            if (new != null) R.string.change_account else R.string.log_in
         loginFrag.checked = (new != null)
         if (new != null) {
             buttonLogin.text = getString(R.string.change_account)
@@ -266,7 +265,12 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
     private fun wallpaperEnabled(): Boolean {
         val wallpaperInfo = WallpaperManager.getInstance(applicationContext)?.wallpaperInfo
-        Log.d(getString(R.string.logTag), "Installed wallpaper: ${wallpaperInfo?.packageName}; $wallpaperInfo")
+        if (BuildConfig.DEBUG) {
+            Log.d(
+                getString(R.string.logTag),
+                "Installed wallpaper: ${wallpaperInfo?.packageName}; $wallpaperInfo"
+            )
+        }
         val installedPackage = wallpaperInfo?.packageName
         return PACKAGE == installedPackage
     }
@@ -412,13 +416,18 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         startService(intent)
     }
 
+    @SuppressLint("Recycle") // Android Studio doesn't detect that cursor is safely closed
     @WorkerThread
-    private fun lookUpUri(uri: Uri, drive: Drive): File? {
-        val cursor = contentResolver.query(uri, null, null, null, null) ?:
-                return null
-        cursor.moveToFirst()
+    internal fun lookUpUri(uri: Uri, drive: Drive): File? {
         val mimeType = contentResolver.getType(uri)
-        val name = cursor.getString(cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME))
+        val name: String
+        val cursor = contentResolver.query(uri, null, null, null, null) ?: return null
+        try {
+            cursor.moveToFirst()
+            name = cursor.getString(cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME))
+        } finally {
+            cursor.close()
+        }
         val request = drive.Files().list()
         var query : String = "name = '${queryEscape(name)}'"
         if (mimeType != null) {
@@ -432,12 +441,16 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         val candidates = ArrayList<File>()
         do {
             request.pageToken = nextPageToken
-            Log.d(getString(R.string.logTag), "Sending request: ${request}")
+            if (BuildConfig.DEBUG) {
+                Log.d(getString(R.string.logTag), "Sending request: ${request}")
+            }
             val response = request.execute()
             nextPageToken = response.nextPageToken
             val list = response.files
-            Log.d(getString(R.string.logTag), "response: ${response}")
-            Log.d(getString(R.string.logTag), "Got a list of ${list.size} files")
+            if (BuildConfig.DEBUG) {
+                Log.d(getString(R.string.logTag), "response: ${response}")
+                Log.d(getString(R.string.logTag), "Got a list of ${list.size} files")
+            }
             candidates.addAll(list)
         } while (nextPageToken != null)
         if (candidates.size == 1) {
@@ -456,7 +469,6 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         val wallpaperSet = wallpaperEnabled()
         frag.checked = wallpaperSet
         frag.enabled = !wallpaperSet
-        buttonWallpaper.isEnabled = !wallpaperSet
     }
 }
 

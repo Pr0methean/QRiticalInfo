@@ -1,7 +1,6 @@
 package com.example.qriticalinfo
 
 import android.content.Context
-import android.content.SharedPreferences
 import android.util.Log
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential
@@ -14,8 +13,6 @@ val DEFAULT_GOOGLE_ACCOUNT = GoogleSignInAccount.createDefault()!!
 
 val JSON_FACTORY = GsonFactory()
 val HTTP_TRANSPORT by lazy { NetHttpTransport() }
-
-val ID_REGEX = Regex("/[-\\w]{25,}/")
 
 // { return DocumentsContract.getDocumentId(url).split("doc=encoded=")[1] }
 
@@ -34,15 +31,6 @@ fun getDriveForAccount(
     return Drive.Builder(HTTP_TRANSPORT, JSON_FACTORY, credential)
         .setApplicationName(context.getString(R.string.app_name))
         .build()
-}
-
-fun getFileUri(
-    sharedPreferences: SharedPreferences,
-    account: GoogleSignInAccount?
-): String? {
-    return if (account != null) {
-        sharedPreferences.getString(account.id, null)
-    } else null
 }
 
 fun filterDefault(account: GoogleSignInAccount?) = if (DEFAULT_GOOGLE_ACCOUNT == account) null else account
