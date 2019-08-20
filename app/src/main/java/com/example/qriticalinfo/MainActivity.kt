@@ -1,4 +1,4 @@
-package com.example.qrhealth
+package com.example.qriticalinfo
 
 import android.Manifest
 import android.app.Activity
@@ -416,6 +416,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         if (candidates.size == 1) {
             return candidates[0]
         }
+        showAlert(R.string.filename_must_be_unique, {})
         Log.e(getString(R.string.logTag),"Got ${candidates.size} matches: ${candidates}")
         return null
     }

@@ -1,4 +1,4 @@
-package com.example.qrhealth
+package com.example.qriticalinfo
 
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.properties.ReadWriteProperty

@@ -1,4 +1,4 @@
-package com.example.qrhealth
+package com.example.qriticalinfo
 
 import android.content.Context
 import android.os.Bundle

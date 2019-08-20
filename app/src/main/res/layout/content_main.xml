@@ -10,7 +10,7 @@
 
     <fragment
         android:id="@+id/loginFragment"
-        android:name="com.example.qrhealth.ChecklistItemFragment"
+        android:name="com.example.qriticalinfo.ChecklistItemFragment"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="16dp"
@@ -21,7 +21,7 @@
 
     <fragment
         android:id="@+id/chooseFileFragment"
-        android:name="com.example.qrhealth.ChecklistItemFragment"
+        android:name="com.example.qriticalinfo.ChecklistItemFragment"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="16dp"
@@ -32,7 +32,7 @@
 
     <fragment
         android:id="@+id/wallpaperPickerFragment"
-        android:name="com.example.qrhealth.ChecklistItemFragment"
+        android:name="com.example.qriticalinfo.ChecklistItemFragment"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="16dp"

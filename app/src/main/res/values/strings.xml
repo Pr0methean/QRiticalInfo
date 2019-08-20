@@ -1,15 +1,12 @@
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
-    <string name="app_name">QRHealth</string>
+    <string name="app_name">QRitical Info</string>
     <string name="action_settings">Settings</string>
     <string name="log_in">Log in</string>
     <string name="edit_file">Select file</string>
     <string name="change_account">Log out</string>
-    <string name="wallpaper_name">QRHealth Info Wallpaper</string>
+    <string name="wallpaper_name">QRitical Info Wallpaper</string>
     <string name="wallpaper_description">Shows a QR code linking to essential info.</string>
-    <string name="logTag">QRHealth</string>
-
-    <!-- TODO: Remove or change this placeholder text -->
-    <string name="hello_blank_fragment">Hello blank fragment</string>
+    <string name="logTag">QRiticalInfo</string>
     <string name="checklist_item_placeholder">TODO: Name this checklist item</string>
     <string name="main_activity_title">Set Up QRHealth</string>
     <string name="loading">Loading…</string>
@@ -17,14 +14,15 @@
     <string name="todo">Not done yet</string>
     <string name="done">Done</string>
     <string name="set_wallpaper">Set QRHealth as lock-screen wallpaper</string>
-    <string name="chosen_file_key">com.example.qrhealth.CHOSEN_FILES</string>
+    <string name="chosen_file_key">com.example.qriticalinfo.CHOSEN_FILES</string>
     <string name="choose">Browse existing</string>
     <string name="newfile">New…</string>
     <string name="editfile">Edit…</string>
     <string name="choose_file_first">Choose or create a file first!</string>
-    <string name="not_configured">Open the QRHealth app to finish<br />setting up this wallpaper.</string>
+    <string name="not_configured">Open the QRitical Info app to<br />finish setting up this wallpaper.</string>
     <string name="no_app_can_edit">No installed app can open this file!</string>
     <string name="not_on_drive">The file you\'re sharing must be in your Google Drive.</string>
     <string name="no_app_can_edit_text">No app on this device can edit plain text files!</string>
-    <string name="permission_explanation">This app needs access to your accounts so that it can obtain the sharing link for the file you\'re sharing.</string>
+    <string name="permission_explanation">This app needs access to your accounts and Drive so that it can obtain the sharing link for the file you\'re sharing. Permissions may seem excessive because of Google Drive API limitations.</string>
+    <string name="filename_must_be_unique">This file has the same name as a file in another folder of your Google Drive. Due to a limitation of the Google Drive API, you must use a file with a unique name.</string>
 </resources>

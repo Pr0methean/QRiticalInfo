@@ -1,4 +1,4 @@
-package com.example.qrhealth
+package com.example.qriticalinfo
 
 import android.app.WallpaperManager
 import android.content.BroadcastReceiver
