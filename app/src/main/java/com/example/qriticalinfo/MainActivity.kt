@@ -35,10 +35,10 @@ import com.google.api.services.drive.model.Permission
 import kotlinx.android.synthetic.main.content_main.*
 import java.util.concurrent.Executors
 
+const val PACKAGE = "com.example.qriticalinfo"
+
 class MainActivity : AppCompatActivity(), View.OnClickListener {
-    override fun onClick(view: View?) {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
-    }
+    override fun onClick(view: View?) {} // FIXME: Why is this interface needed?
 
     private val sharingPermission by lazy {
         val permission = Permission()
@@ -81,6 +81,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
             if (new != null) R.string.change_account else R.string.log_in
         loginFrag.checked = (new != null)
         if (new != null) {
+            buttonLogin.text = getString(R.string.change_account)
             val accountId = new.id
             val newEditUrlString = accountId?.let {defaultFilePrefs.getString("$it:edit", null)}
             val newShareUrlString = accountId?.let {defaultFilePrefs.getString("$it:share", null)}
@@ -91,6 +92,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                 .putString("share", newShareUrlString)
                 .apply()
         } else {
+            buttonLogin.text = getString(R.string.log_in)
             editUri = null
         }
         val intent = Intent(applicationContext!!, QriticalInfoWallpaper::class.java)
@@ -103,7 +105,17 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         drive = if (new != null) getDriveForAccount(new, applicationContext) else null
     }
 
-    private var editUri by AtomicReferenceObservable<Uri?>(null) {_, new ->
+    override fun onStart() {
+        super.onStart()
+        updateWallpaperStatus()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        updateWallpaperStatus()
+    }
+
+    private var editUri by AtomicReferenceObservable<Uri?>(null) { _, new ->
         val chooseFileFrag = chooseFileFragment as ChecklistItemFragment
         chooseFileFrag.checked = (new != null)
         buttonEdit.isEnabled = (new != null)
@@ -116,19 +128,24 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         requestPermissionIfNeeded()
         val initialAccount = filterDefault(GoogleSignIn.getLastSignedInAccount(applicationContext))
         setContentView(R.layout.activity_main)
-        //setSupportActionBar(toolbar)
         account = initialAccount
         val loginFragment = this.loginFragment as ChecklistItemFragment
-        loginFragment.nameRes = R.string.log_in
+        loginFragment.nameRes = R.string.logged_in
         loginFragment.checked = initialAccount != null
         loginFragment.onClickListener = View.OnClickListener {
+            if (account == null) {
+                startLoginActivity()
+            }
+            // If already logged in, must click the *button* to change account
+        }
+        buttonLogin.setOnClickListener(View.OnClickListener {
             if (account != null) {
                 Log.d(getString(R.string.logTag), "Signing out")
                 loginFragment.enabled = false
                 val signOutTask = client.signOut()
                 signOutTask.addOnCompleteListener {
                     account = null
-                    loginFragment.enabled = true
+                    startLoginActivity()
                 }
                 signOutTask.addOnFailureListener {
                     Log.wtf(getString(R.string.logTag), it)
@@ -136,9 +153,9 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                 }
             } else {
                 Log.d(getString(R.string.logTag), "Signing in")
-                startActivityForResult(client.signInIntent, RC_SIGN_IN)
+                startLoginActivity()
             }
-        }
+        })
         editUri = defaultFilePrefs.getString("edit", null)?.let { Uri.parse(it) }
         val chooseFileFragment = this.chooseFileFragment as ChecklistItemFragment
         chooseFileFragment.nameRes = R.string.edit_file
@@ -148,19 +165,12 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
             openFileForEditing(false)
         }
         val wallpaperPickerFragment = this.wallpaperPickerFragment as ChecklistItemFragment
-        wallpaperPickerFragment.enabled = true
         wallpaperPickerFragment.nameRes = R.string.set_wallpaper
-        wallpaperPickerFragment.checked = wallpaperEnabled()
+        updateWallpaperStatus()
         wallpaperPickerFragment.onClickListener = View.OnClickListener {
-            Log.d(getString(R.string.logTag), "wallpaperPickerFragment.OnClickListener starting")
-            val i = Intent()
-            i.action = WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER
-
-            val p = QriticalInfoWallpaper::class.java.getPackage()!!.name
-            i.putExtra(WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT, ComponentName(p, QriticalInfoWallpaper::class.java.name))
-            startActivityForResult(i, RC_SET_WALLPAPER)
-            Log.d(getString(R.string.logTag), "wallpaperPickerFragment.OnClickListener done")
+            launchWallpaperPicker()
         }
+        buttonWallpaper.setOnClickListener { launchWallpaperPicker() }
         if (BuildConfig.DEBUG) {
             val currentPrefs = defaultFilePrefs.all
             if (currentPrefs.isEmpty()) {
@@ -170,6 +180,22 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                 Log.d(getString(R.string.logTag), "Shared pref in MainActivity: $key = $value")
             }
         }
+    }
+
+    private fun launchWallpaperPicker() {
+        val i = Intent()
+        i.action = WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER
+
+        val p = QriticalInfoWallpaper::class.java.getPackage()!!.name
+        i.putExtra(
+            WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
+            ComponentName(p, QriticalInfoWallpaper::class.java.name)
+        )
+        startActivityForResult(i, RC_SET_WALLPAPER)
+    }
+
+    private fun startLoginActivity() {
+        startActivityForResult(client.signInIntent, RC_SIGN_IN)
     }
 
     private fun requestPermissionIfNeeded(): Boolean {
@@ -203,14 +229,13 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         if (currentAccount == null) {
             Toast.makeText(this@MainActivity.applicationContext, R.string.log_in_first, Toast.LENGTH_LONG).show()
         } else {
-            val uriString = getFileUri(defaultFilePrefs, currentAccount)
-            if (uriString == null) {
+            val currentEditUri = editUri
+            if (currentEditUri == null) {
                 Toast.makeText(this@MainActivity.applicationContext, R.string.choose_file_first, Toast.LENGTH_LONG)
                     .show()
             } else {
-                val uri = Uri.parse(uriString)
                 val i = Intent(Intent.ACTION_EDIT)
-                i.data = uri
+                i.data = currentEditUri
                 try {
                     startActivity(i)
                 } catch (e: ActivityNotFoundException) {
@@ -240,8 +265,10 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
     }
 
     private fun wallpaperEnabled(): Boolean {
-        val installedPackage = WallpaperManager.getInstance(applicationContext)?.wallpaperInfo?.packageName
-        return packageName == installedPackage
+        val wallpaperInfo = WallpaperManager.getInstance(applicationContext)?.wallpaperInfo
+        Log.d(getString(R.string.logTag), "Installed wallpaper: ${wallpaperInfo?.packageName}; $wallpaperInfo")
+        val installedPackage = wallpaperInfo?.packageName
+        return PACKAGE == installedPackage
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -423,5 +450,13 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
     private fun queryEscape(input: String): String =
         input.replace("\\", "\\\\").replace("'", "\\'")
+
+    private fun updateWallpaperStatus() {
+        val frag = wallpaperPickerFragment as ChecklistItemFragment
+        val wallpaperSet = wallpaperEnabled()
+        frag.checked = wallpaperSet
+        frag.enabled = !wallpaperSet
+        buttonWallpaper.isEnabled = !wallpaperSet
+    }
 }
 
