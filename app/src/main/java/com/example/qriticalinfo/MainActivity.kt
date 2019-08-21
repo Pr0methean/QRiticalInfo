@@ -36,6 +36,9 @@ import com.google.api.services.drive.model.Permission
 import kotlinx.android.synthetic.main.content_main.*
 import java.util.concurrent.Executors
 
+const val FILE_PERMISSIONS = Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
+        Intent.FLAG_GRANT_READ_URI_PERMISSION or
+        Intent.FLAG_GRANT_WRITE_URI_PERMISSION
 const val PACKAGE = "com.example.qriticalinfo"
 
 class MainActivity : AppCompatActivity(), View.OnClickListener {
@@ -233,6 +236,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                 Toast.makeText(this@MainActivity.applicationContext, R.string.choose_file_first, Toast.LENGTH_LONG)
                     .show()
             } else {
+                contentResolver.takePersistableUriPermission(currentEditUri, FILE_PERMISSIONS)
                 val i = Intent(Intent.ACTION_EDIT)
                 i.data = currentEditUri
                 try {
