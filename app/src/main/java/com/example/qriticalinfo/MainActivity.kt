@@ -9,6 +9,8 @@ import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+import android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -78,7 +80,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         const val RC_PICK_NEW_FILE = 4
         const val RC_PERMISSION = 5
     }
-
+    
     private var account by AtomicReferenceObservable<GoogleSignInAccount?>(null) { _, new ->
         val loginFrag = loginFragment as ChecklistItemFragment
         loginFrag.checked = (new != null)
@@ -236,7 +238,8 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                 Toast.makeText(this@MainActivity.applicationContext, R.string.choose_file_first, Toast.LENGTH_LONG)
                     .show()
             } else {
-                contentResolver.takePersistableUriPermission(currentEditUri, FILE_PERMISSIONS)
+                contentResolver.takePersistableUriPermission(currentEditUri, FLAG_GRANT_READ_URI_PERMISSION)
+                contentResolver.takePersistableUriPermission(currentEditUri, FLAG_GRANT_WRITE_URI_PERMISSION)
                 val i = Intent(Intent.ACTION_EDIT)
                 i.data = currentEditUri
                 try {

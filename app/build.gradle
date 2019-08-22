@@ -43,6 +43,12 @@ repositories {
 }
 
 dependencies {
+    configurations {
+        all {
+            exclude module: 'httpclient'
+            exclude module: 'commons-logging'
+        }
+    }
     implementation fileTree(dir: 'libs', include: ['*.jar'])
     implementation 'androidx.multidex:multidex:2.0.1'
     implementation 'com.github.kenglxn:QRGen:2.5.0'
