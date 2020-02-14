@@ -129,6 +129,7 @@ class QriticalInfoWallpaper : WallpaperService(), SharedPreferences.OnSharedPref
 
             override fun onSurfaceChanged(holder: SurfaceHolder?, format: Int, width: Int, height: Int) {
                 super.onSurfaceChanged(holder, format, width, height)
+                surfaceHolder ?: return
                 resizeIfNecessary(surfaceHolder)
                 Log.d(getString(R.string.logTag), "onSurfaceChanged")
                 if (holder == null) {
@@ -148,11 +149,10 @@ class QriticalInfoWallpaper : WallpaperService(), SharedPreferences.OnSharedPref
             override fun onCreate(surfaceHolder: SurfaceHolder?) {
                 super.onCreate(surfaceHolder)
                 Log.d(getString(R.string.logTag), "onCreate")
-                if (surfaceHolder != null) {
-                    resizeIfNecessary(surfaceHolder)
-                    updateQrCode()
-                    draw(surfaceHolder)
-                }
+                surfaceHolder ?: return
+                resizeIfNecessary(surfaceHolder)
+                updateQrCode()
+                draw(surfaceHolder)
             }
 
             override fun onCommand(
@@ -175,12 +175,13 @@ class QriticalInfoWallpaper : WallpaperService(), SharedPreferences.OnSharedPref
                 return out
             }
 
-            override fun onSurfaceCreated(holder: SurfaceHolder?) {
-                super.onSurfaceCreated(holder)
-                resizeIfNecessary(holder)
+            override fun onSurfaceCreated(surfaceHolder: SurfaceHolder?) {
+                super.onSurfaceCreated(surfaceHolder)
+                surfaceHolder ?: return
+                haveSurface = true
+                resizeIfNecessary(surfaceHolder)
                 Log.d(getString(R.string.logTag), "onSurfaceCreated")
-                    haveSurface = true
-                draw(holder)
+                draw(surfaceHolder)
             }
         }
     }
@@ -206,8 +207,7 @@ class QriticalInfoWallpaper : WallpaperService(), SharedPreferences.OnSharedPref
         }
     }
 
-    internal fun resizeIfNecessary(newHolder: SurfaceHolder?) {
-        newHolder ?: return
+    internal fun resizeIfNecessary(newHolder: SurfaceHolder) {
         val frame = newHolder.surfaceFrame
         val newWidth = frame.width()
         val newHeight = frame.height()
@@ -220,7 +220,7 @@ class QriticalInfoWallpaper : WallpaperService(), SharedPreferences.OnSharedPref
 
     @UiThread
     internal fun draw(surfaceHolder: SurfaceHolder?) {
-        if (surfaceHolder == null) return
+        surfaceHolder ?: return
         if (!haveSurface) return
         resizeIfNecessary(surfaceHolder)
         val dest = surfaceHolder.surfaceFrame
