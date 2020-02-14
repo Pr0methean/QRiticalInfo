@@ -30,7 +30,6 @@ val ERROR_PAINT by lazy {
     out.textSize = 18.0f
     out
 }
-val SOURCE_SIZE = 1000
 
 class QriticalInfoWallpaper : WallpaperService(), SharedPreferences.OnSharedPreferenceChangeListener {
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, p1: String?) {
