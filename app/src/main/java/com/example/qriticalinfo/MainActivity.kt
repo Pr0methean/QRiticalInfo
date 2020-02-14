@@ -44,7 +44,7 @@ const val FILE_PERMISSIONS = Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
 const val PACKAGE = "com.example.qriticalinfo"
 
 class MainActivity : AppCompatActivity(), View.OnClickListener {
-    override fun onClick(view: View?) {} // FIXME: Why is this interface needed?
+    private val nonUiThread by lazy(Executors::newSingleThreadExecutor)
 
     private val sharingPermission by lazy {
         val permission = Permission()
@@ -61,15 +61,11 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
             .build()
     }
 
-    private val client by lazy {
+    private val signInClient by lazy {
         GoogleSignIn.getClient(applicationContext, gso)
     }
 
-    private val threadPool by lazy {
-        Executors.newSingleThreadExecutor()
-    }
-
-    internal val defaultFilePrefs by lazy {
+    internal val prefs by lazy {
         getSharedPreferences(getString(R.string.chosen_file_key), Context.MODE_PRIVATE)
     }
 
@@ -81,19 +77,19 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         const val RC_PERMISSION = 5
     }
     
-    private var account by AtomicReferenceObservable<GoogleSignInAccount?>(null) { _, new ->
+    private var account by AtomicReferenceObservable<GoogleSignInAccount?>(null) { _, account ->
         val loginFrag = loginFragment as ChecklistItemFragment
-        loginFrag.checked = (new != null)
-        if (new != null) {
+        loginFrag.checked = (account != null)
+        if (account != null) {
             buttonLogin.text = getString(R.string.change_account)
-            val accountId = new.id
-            val newEditUrlString = accountId?.let {defaultFilePrefs.getString("$it:edit", null)}
-            val newShareUrlString = accountId?.let {defaultFilePrefs.getString("$it:share", null)}
-            editUri = newEditUrlString?.let {Uri.parse(it)}
-            Log.d(getString(R.string.logTag), "URIs after login: $newEditUrlString, $newShareUrlString")
-            defaultFilePrefs.edit()
-                .putString("edit", newEditUrlString)
-                .putString("share", newShareUrlString)
+            val accountId = account.id
+            val newEditUriString = accountId?.let {prefs.getString("$it:edit", null)}
+            val newShareUrlString = accountId?.let {prefs.getString("$it:share", null)}
+            editUri = newEditUriString?.let(Uri::parse)
+            Log.d(getString(R.string.logTag), "URIs after login: $newEditUriString, $newShareUrlString")
+            prefs.edit()
+                .putString("$accountId:edit", newEditUriString)
+                .putString("$accountId:share", newShareUrlString)
                 .apply()
         } else {
             buttonLogin.text = getString(R.string.log_in)
@@ -101,13 +97,18 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         }
         val intent = Intent(applicationContext!!, QriticalInfoWallpaper::class.java)
         intent.action = Context.WALLPAPER_SERVICE
-        intent.putExtra("account", new)
+        intent.putExtra("account", account)
         if (BuildConfig.DEBUG) {
-            Log.d(getString(R.string.logTag), "Sending intent for account $new")
+            Log.d(getString(R.string.logTag), "Sending intent for account $account")
         }
         startService(intent)
-        drive = if (new != null) getDriveForAccount(new, applicationContext) else null
+        drive = account?.let {getDriveForAccount(it, applicationContext)}
     }
+
+    /**
+     * Required interface; no-op because each fragment has its own click handler.
+     */
+    override fun onClick(view: View?) {}
 
     override fun onStart() {
         super.onStart()
@@ -137,16 +138,17 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         loginFragment.nameRes = R.string.logged_in
         loginFragment.checked = initialAccount != null
         loginFragment.onClickListener = View.OnClickListener {
+            // If already logged in, user must tap the *button* to change account;
+            // but if not logged in, user can tap anywhere in the fragment to log in.
             if (account == null) {
                 startLoginActivity()
             }
-            // If already logged in, must click the *button* to change account
         }
         buttonLogin.setOnClickListener(View.OnClickListener {
             if (account != null) {
                 Log.d(getString(R.string.logTag), "Signing out")
                 loginFragment.enabled = false
-                val signOutTask = client.signOut()
+                val signOutTask = signInClient.signOut()
                 signOutTask.addOnCompleteListener {
                     account = null
                     startLoginActivity()
@@ -160,7 +162,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                 startLoginActivity()
             }
         })
-        editUri = defaultFilePrefs.getString("edit", null)?.let { Uri.parse(it) }
+        editUri = prefs.getString("edit", null)?.let { Uri.parse(it) }
         val chooseFileFragment = this.chooseFileFragment as ChecklistItemFragment
         chooseFileFragment.nameRes = R.string.edit_file
         buttonChoose.setOnClickListener { launchFilePicker(Intent.ACTION_OPEN_DOCUMENT, "*/*", RC_PICK_FILE) }
@@ -176,7 +178,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         }
         buttonWallpaper.setOnClickListener { launchWallpaperPicker() }
         if (BuildConfig.DEBUG) {
-            val currentPrefs = defaultFilePrefs.all
+            val currentPrefs = prefs.all
             if (currentPrefs.isEmpty()) {
                 Log.d(getString(R.string.logTag), "Shared prefs are empty in MainActivity")
             }
@@ -199,7 +201,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
     }
 
     private fun startLoginActivity() {
-        startActivityForResult(client.signInIntent, RC_SIGN_IN)
+        startActivityForResult(signInClient.signInIntent, RC_SIGN_IN)
     }
 
     private fun requestPermissionIfNeeded(): Boolean {
@@ -322,18 +324,19 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         }
         if ("com.google.android.apps.docs.storage" != uri.authority) {
             Log.e(getString(R.string.logTag), "$uri isn't on Google Drive")
-            showAlert(R.string.not_on_drive) { /* TODO: Save launchFilePicker params and use them to retry */ }
+            showAlert(R.string.not_on_drive) {}
+            /* TODO: Save launchFilePicker params and use them to retry */
             return false
         }
         editUri = uri
         val currentDrive = drive
         if (currentDrive == null) {
             Log.e(getString(R.string.logTag), "Unable to get sharing link")
-            defaultFilePrefs.edit().remove("edit").remove("share").apply()
+            prefs.edit().remove("edit").remove("share").apply()
             return false
         }
         val uriString = uri.toString()
-        threadPool.submit {
+        nonUiThread.submit {
             val file = lookUpUri(uri, currentDrive)
             if (file == null) {
                 Log.e(getString(R.string.logTag), "lookUpUri returned null for $uriString")
@@ -400,7 +403,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         if (BuildConfig.DEBUG) {
             Log.d(getString(R.string.logTag), "saveFileChoice($editingUri, $sharingUri, $accountId")
         }
-        val prefUpdate = defaultFilePrefs.edit()
+        val prefUpdate = prefs.edit()
             .putString("edit", editingUri)
             .putString("share", sharingUri)
         if (accountId != null) {
@@ -427,13 +430,10 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
     @WorkerThread
     internal fun lookUpUri(uri: Uri, drive: Drive): File? {
         val mimeType = contentResolver.getType(uri)
-        val name: String
         val cursor = contentResolver.query(uri, null, null, null, null) ?: return null
-        try {
-            cursor.moveToFirst()
-            name = cursor.getString(cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME))
-        } finally {
-            cursor.close()
+        val name = cursor.use {
+            it.moveToFirst()
+            it.getString(it.getColumnIndex(OpenableColumns.DISPLAY_NAME))
         }
         val request = drive.Files().list()
         var query : String = "name = '${queryEscape(name)}'"
