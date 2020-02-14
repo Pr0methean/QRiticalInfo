@@ -124,19 +124,20 @@ class QriticalInfoWallpaper : WallpaperService(), SharedPreferences.OnSharedPref
             override fun onSurfaceRedrawNeeded(holder: SurfaceHolder?) {
                 super.onSurfaceRedrawNeeded(holder)
                 Log.d(getString(R.string.logTag), "onSurfaceRedrawNeeded")
-                draw(holder)
+                holder?.run(this@QriticalInfoWallpaper::draw)
             }
 
-            override fun onSurfaceChanged(holder: SurfaceHolder?, format: Int, width: Int, height: Int) {
-                super.onSurfaceChanged(holder, format, width, height)
-                surfaceHolder ?: return
-                resizeIfNecessary(surfaceHolder)
+            override fun onSurfaceChanged(surfaceHolder: SurfaceHolder?, format: Int, width: Int, height: Int) {
+                super.onSurfaceChanged(surfaceHolder, format, width, height)
                 Log.d(getString(R.string.logTag), "onSurfaceChanged")
-                if (holder == null) {
+                if (surfaceHolder == null) {
+                    haveSurface = false
                     callback = null
                 } else {
-                    callback = DrawRunnable(holder)
-                    draw(holder)
+                    haveSurface = true
+                    resizeIfNecessary(surfaceHolder)
+                    callback = DrawRunnable(surfaceHolder)
+                    draw(surfaceHolder)
                 }
             }
 
@@ -219,8 +220,7 @@ class QriticalInfoWallpaper : WallpaperService(), SharedPreferences.OnSharedPref
     }
 
     @UiThread
-    internal fun draw(surfaceHolder: SurfaceHolder?) {
-        surfaceHolder ?: return
+    internal fun draw(surfaceHolder: SurfaceHolder) {
         if (!haveSurface) return
         resizeIfNecessary(surfaceHolder)
         val dest = surfaceHolder.surfaceFrame
