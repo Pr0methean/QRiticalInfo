@@ -2,7 +2,9 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
+      <module fileurl="file://$USER_HOME$/git/QRiticalInfo/QRiticalInfo.iml" filepath="$USER_HOME$/git/QRiticalInfo/QRiticalInfo.iml" group="QRiticalInfo" />
       <module fileurl="file://$USER_HOME$/git/QRiticalInfo/app/QRiticalInfo-app.iml" filepath="$USER_HOME$/git/QRiticalInfo/app/QRiticalInfo-app.iml" />
+      <module fileurl="file://$USER_HOME$/git/QRiticalInfo/app/app.iml" filepath="$USER_HOME$/git/QRiticalInfo/app/app.iml" group="QRiticalInfo/app" />
       <module fileurl="file://$USER_HOME$/git/QRiticalInfo/git-QRiticalInfo.iml" filepath="$USER_HOME$/git/QRiticalInfo/git-QRiticalInfo.iml" />
     </modules>
   </component>
